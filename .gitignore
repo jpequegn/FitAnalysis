@@ -17,3 +17,7 @@ htmlcov/
 .coverage
 .coverage.*
 .pytest_cache/
+
+# Web app files
+main.py
+index.html
