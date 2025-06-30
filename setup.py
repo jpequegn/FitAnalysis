@@ -11,6 +11,13 @@ setup(
         'fitparse>=1.1.0',
         'pandas>=1.0.0',
     ],
+    extras_require={
+        'web': [
+            'fastapi>=0.100.0',
+            'uvicorn>=0.22.0',
+            'python-multipart>=0.0.6',
+        ],
+    },
     classifiers=[
         'Programming Language :: Python :: 3',
     ],

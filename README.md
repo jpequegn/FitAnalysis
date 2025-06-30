@@ -52,6 +52,22 @@ print("\nPower:")
 print(power_series.head())
 ```
 
+## Web API
+
+This project also includes a web API for uploading and analyzing FIT files.
+
+### Running the API
+
+1.  Install the required dependencies:
+    ```bash
+    pip install -e .[web]
+    ```
+2.  Run the web server:
+    ```bash
+    uvicorn main:app --reload
+    ```
+3.  Open your browser and navigate to `http://127.0.0.1:8000` to access the upload interface.
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please follow these steps:
