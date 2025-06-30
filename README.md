@@ -64,7 +64,7 @@ This project also includes a web API for uploading and analyzing FIT files.
     ```
 2.  Run the web server:
     ```bash
-    uvicorn fitanalysis.main:app --reload
+    uvicorn main:app --reload
     ```
 3.  Open your browser and navigate to `http://127.0.0.1:8000` to access the upload interface.
 

@@ -19,5 +19,5 @@ htmlcov/
 .pytest_cache/
 
 # Web app files
-fitanalysis/main.py
-fitanalysis/index.html
+main.py
+index.html
