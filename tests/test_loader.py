@@ -1,41 +1,8 @@
 import pandas as pd
 import pytest
-from fitanalysis.loader import FitDataLoader, FitParseError
+from fitanalysis.loader import FitDataLoader, FitParseError, max_power_by_time
 import fitanalysis.loader as loader_module
-
-
-class DummyRecord:
-    def __init__(self, timestamp, hr=None, power=None):
-        self._values = {'timestamp': timestamp}
-        if hr is not None:
-            self._values['heart_rate'] = hr
-        if power is not None:
-            self._values['power'] = power
-
-    def get_value(self, key):
-        return self._values.get(key)
-
-
-class DummyFitFile:
-    def __init__(self, file_path):
-        self.file_path = file_path
-
-    def get_messages(self, msg_type):
-        if self.file_path == 'dummy.fit':
-            return [
-                DummyRecord('2020-01-01T00:00:00Z', hr=100, power=150),
-                DummyRecord('2020-01-01T00:00:01Z', hr=101, power=151),
-                DummyRecord('2020-01-01T00:00:02Z', hr=None, power=152),
-            ]
-        elif self.file_path == 'power_only.fit':
-            return [DummyRecord('t1', power=200), DummyRecord('t2', power=201)]
-        elif self.file_path == 'hr_only.fit':
-            return [DummyRecord('t1', hr=120), DummyRecord('t2', hr=121)]
-        elif self.file_path == 'empty.fit':
-            return []
-        elif self.file_path == 'corrupt.fit':
-            raise FitParseError("Corrupted file")
-        return []
+from fitanalysis.dummy_data import DummyFitFile
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +13,7 @@ def patch_fitfile(monkeypatch):
 def test_load_creates_dataframe():
     loader = FitDataLoader('dummy.fit')
     df = loader.load()
-    assert list(df.index) == pd.to_datetime(['2020-01-01T00:00:00Z', '2020-01-01T00:00:01Z', '2020-01-01T00:00:02Z']).tolist()
+    assert list(df.index) == [pd.Timestamp('2020-01-01T00:00:00Z'), pd.Timestamp('2020-01-01T00:00:01Z'), pd.Timestamp('2020-01-01T00:00:02Z')]
     assert 'heart_rate' in df.columns
     assert 'power' in df.columns
     assert df.loc[pd.Timestamp('2020-01-01T00:00:00Z'), 'heart_rate'] == 100
@@ -106,3 +73,15 @@ def test_corrupt_file():
     loader = FitDataLoader('corrupt.fit')
     with pytest.raises(IOError, match="Error parsing FIT file: Corrupted file"):
         loader.load()
+
+def test_max_power_by_time():
+    """
+    Tests the max_power_by_time function.
+    """
+    max_power = max_power_by_time('dummy.fit')
+    assert isinstance(max_power, pd.Series)
+    assert max_power.to_dict() == {
+        pd.to_datetime('2020-01-01T00:00:00Z').time(): 150,
+        pd.to_datetime('2020-01-01T00:00:01Z').time(): 151,
+        pd.to_datetime('2020-01-01T00:00:02Z').time(): 152,
+    }
