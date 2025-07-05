@@ -49,3 +49,26 @@ class FitDataLoader:
         # We need to assert that self.data is not None to satisfy mypy
         assert self.data is not None
         return self.data.get('power', pd.Series(dtype='float64'))
+
+def max_power_by_time(file_path):
+    """
+    Calculates the maximum power at each time step from a FIT file.
+
+    Args:
+        file_path (str): The path to the FIT file.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the maximum power for each time step.
+    """
+    fitfile = FitFile(file_path)
+    records = []
+    for record in fitfile.get_messages('record'):
+        records.append({
+            'timestamp': record.get_value('timestamp'),
+            'power': record.get_value('power')
+        })
+    df = pd.DataFrame(records)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df = df.set_index('timestamp')
+    max_power = df.groupby(df.index.time)['power'].max()
+    return max_power
