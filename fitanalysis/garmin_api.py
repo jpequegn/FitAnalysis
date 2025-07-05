@@ -4,6 +4,7 @@ import os
 from getpass import getpass
 from dotenv import load_dotenv
 from fitanalysis.metadata_store import MetadataStore
+from fitanalysis.config import get_config
 
 from garminconnect import (
     Garmin,
@@ -17,11 +18,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GarminConnectAPI:
-    def __init__(self, email=None, password=None, db_path='fit_metadata.db'):
+    def __init__(self, email=None, password=None, db_path=None, config=None):
         load_dotenv() # Load environment variables from .env file
-        self.email = email if email else os.getenv("GARMIN_EMAIL")
-        self.password = password if password else os.getenv("GARMIN_PASSWORD")
+        
+        # Use provided config or get global config
+        if config is None:
+            config = get_config()
+        
+        self.config = config
+        self.email = email if email else config.garmin.email or os.getenv("GARMIN_EMAIL")
+        self.password = password if password else config.garmin.password or os.getenv("GARMIN_PASSWORD")
         self.client = None
+        
+        # Use provided db_path or config default
+        db_path = db_path or config.database.path
         self.metadata_store = MetadataStore(db_path=db_path)
 
     def login(self):

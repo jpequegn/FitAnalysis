@@ -16,6 +16,7 @@ setup(
             'fastapi>=0.100.0',
             'uvicorn>=0.22.0',
             'python-multipart>=0.0.6',
+            'httpx>=0.24.0',  # For FastAPI test client
         ],
     },
     classifiers=[
