@@ -30,12 +30,17 @@ class GarminConnectAPI:
             self.client = Garmin(self.email, self.password)
             self.client.login()
             logger.info("Successfully logged in to Garmin Connect.")
-        except (
-            GarminConnectConnectionError,
-            GarminConnectTooManyRequestsError,
-            GarminConnectAuthenticationError,
-        ) as e:
-            logger.error(f"An error occurred during login: {e}")
+        except GarminConnectAuthenticationError as e:
+            logger.error(f"Authentication failed: {e}")
+            raise
+        except GarminConnectConnectionError as e:
+            logger.error(f"Connection error: {e}")
+            raise
+        except GarminConnectTooManyRequestsError as e:
+            logger.error(f"Too many requests: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during login: {e}")
             raise
 
     def get_activities_by_date(self, start_date, end_date):
@@ -43,9 +48,16 @@ class GarminConnectAPI:
             self.login()
         try:
             activities = self.client.get_activities_by_date(start_date, end_date)
+            logger.info(f"Fetched {len(activities)} activities from {start_date} to {end_date}.")
             return activities
+        except GarminConnectConnectionError as e:
+            logger.error(f"Connection error while fetching activities: {e}")
+            raise
+        except GarminConnectTooManyRequestsError as e:
+            logger.error(f"Too many requests while fetching activities: {e}")
+            raise
         except Exception as e:
-            logger.error(f"An error occurred while fetching activities: {e}")
+            logger.error(f"An unexpected error occurred while fetching activities: {e}")
             raise
 
     def download_activity_fit(self, activity_id, file_name=None):
@@ -55,14 +67,24 @@ class GarminConnectAPI:
             fit_data = self.client.download_activity(
                 activity_id, dl_fmt=self.client.ActivityDownloadFormat.FIT
             )
+            if not fit_data:
+                logger.warning(f"No FIT data received for activity ID {activity_id}.")
+                return None
+
             if not file_name:
                 file_name = f"activity_{activity_id}.fit"
             with open(file_name, "wb") as f:
                 f.write(fit_data)
             logger.info(f"FIT file saved as '{file_name}'")
             return file_name
+        except GarminConnectConnectionError as e:
+            logger.error(f"Connection error while downloading FIT file for activity ID {activity_id}: {e}")
+            raise
+        except GarminConnectTooManyRequestsError as e:
+            logger.error(f"Too many requests while downloading FIT file for activity ID {activity_id}: {e}")
+            raise
         except Exception as e:
-            logger.error(f"An error occurred while downloading FIT file: {e}")
+            logger.error(f"An unexpected error occurred while downloading FIT file for activity ID {activity_id}: {e}")
             raise
 
     def logout(self):

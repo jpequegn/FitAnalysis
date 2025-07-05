@@ -68,7 +68,6 @@ def test_hr_only():
     power = loader.get_power()
     assert power.empty
 
-
 def test_corrupt_file():
     loader = FitDataLoader('corrupt.fit')
     with pytest.raises(IOError, match="Error parsing FIT file: Corrupted file"):
@@ -85,3 +84,28 @@ def test_max_power_by_time():
         pd.to_datetime('2020-01-01T00:00:01Z').time(): 151,
         pd.to_datetime('2020-01-01T00:00:02Z').time(): 152,
     }
+
+def test_get_normalized_power():
+    loader = FitDataLoader('dummy.fit')
+    np_value = loader.get_normalized_power()
+    # Based on the dummy data, a manual calculation for NP would be:
+    # Power values: 150, 151, 152
+    # Rolling 30s average (since data is 1s apart, this is just the value itself for each point)
+    # (150^4 + 151^4 + 152^4) / 3 = 510375062.666...
+    # NP = (510375062.666...)^(1/4) = 150.66
+    assert np_value == pytest.approx(150.66, rel=1e-2)
+
+def test_get_intensity_factor():
+    loader = FitDataLoader('dummy.fit')
+    ftp = 200
+    if_value = loader.get_intensity_factor(ftp)
+    # IF = NP / FTP = 150.66 / 200 = 0.7533
+    assert if_value == pytest.approx(0.7533, rel=1e-2)
+
+def test_get_training_stress_score():
+    loader = FitDataLoader('dummy.fit')
+    ftp = 200
+    tss_value = loader.get_training_stress_score(ftp)
+    # TSS = (duration_seconds * NP * IF * 100) / (FTP * 3600)
+    # TSS = (2 * 150.66 * 0.7533 * 100) / (200 * 3600) = 0.0315
+    assert tss_value == pytest.approx(0.0315, rel=1e-2)

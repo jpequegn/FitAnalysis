@@ -14,6 +14,10 @@ class MockGarminClient:
     def login(self):
         if self.email == "test@example.com" and self.password == "password":
             return True
+        elif self.email == "connection_error@example.com":
+            raise GarminConnectConnectionError("Connection failed")
+        elif self.email == "too_many_requests@example.com":
+            raise GarminConnectTooManyRequestsError("Too many requests")
         else:
             raise GarminConnectAuthenticationError("Invalid credentials")
 
@@ -21,11 +25,15 @@ class MockGarminClient:
         pass
 
     def get_activities_by_date(self, start_date, end_date):
+        if self.email == "connection_error@example.com":
+            raise GarminConnectConnectionError("Connection failed")
         if start_date == "2025-01-01" and end_date == "2025-01-07":
             return [{"activityId": 123, "activityName": "Test Activity"}]
         return []
 
     def download_activity(self, activity_id, dl_fmt):
+        if self.email == "connection_error@example.com":
+            raise GarminConnectConnectionError("Connection failed")
         if activity_id == 123 and dl_fmt == "fit":
             return b"dummy_fit_data"
         raise Exception("Download failed")
@@ -41,10 +49,22 @@ def test_login_success(garmin_api):
     assert garmin_api.client is not None
     assert garmin_api.client.display_name == "TestUser"
 
-def test_login_failure():
+def test_login_authentication_failure():
     with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
         api = GarminConnectAPI(email="wrong@example.com", password="wrong")
         with pytest.raises(GarminConnectAuthenticationError):
+            api.login()
+
+def test_login_connection_error():
+    with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
+        api = GarminConnectAPI(email="connection_error@example.com", password="password")
+        with pytest.raises(GarminConnectConnectionError):
+            api.login()
+
+def test_login_too_many_requests_error():
+    with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
+        api = GarminConnectAPI(email="too_many_requests@example.com", password="password")
+        with pytest.raises(GarminConnectTooManyRequestsError):
             api.login()
 
 def test_get_activities_by_date_success(garmin_api):
@@ -52,11 +72,23 @@ def test_get_activities_by_date_success(garmin_api):
     assert len(activities) == 1
     assert activities[0]["activityId"] == 123
 
+def test_get_activities_by_date_connection_error():
+    with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
+        api = GarminConnectAPI(email="connection_error@example.com", password="password")
+        with pytest.raises(GarminConnectConnectionError):
+            api.get_activities_by_date("2025-01-01", "2025-01-07")
+
 def test_download_activity_fit_success(garmin_api, tmp_path):
     file_path = tmp_path / "test_activity.fit"
     downloaded_file = garmin_api.download_activity_fit(123, file_name=str(file_path))
     assert downloaded_file == str(file_path)
     assert file_path.read_bytes() == b"dummy_fit_data"
+
+def test_download_activity_fit_connection_error():
+    with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
+        api = GarminConnectAPI(email="connection_error@example.com", password="password")
+        with pytest.raises(GarminConnectConnectionError):
+            api.download_activity_fit(123)
 
 def test_logout(garmin_api):
     garmin_api.login()
