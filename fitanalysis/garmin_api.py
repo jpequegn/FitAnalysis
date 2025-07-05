@@ -2,6 +2,8 @@ import logging
 import datetime
 import os
 from getpass import getpass
+from dotenv import load_dotenv
+from fitanalysis.metadata_store import MetadataStore
 
 from garminconnect import (
     Garmin,
@@ -15,10 +17,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GarminConnectAPI:
-    def __init__(self, email=None, password=None):
+    def __init__(self, email=None, password=None, db_path='fit_metadata.db'):
+        load_dotenv() # Load environment variables from .env file
         self.email = email if email else os.getenv("GARMIN_EMAIL")
         self.password = password if password else os.getenv("GARMIN_PASSWORD")
         self.client = None
+        self.metadata_store = MetadataStore(db_path=db_path)
 
     def login(self):
         if not self.email:
@@ -60,7 +64,7 @@ class GarminConnectAPI:
             logger.error(f"An unexpected error occurred while fetching activities: {e}")
             raise
 
-    def download_activity_fit(self, activity_id, file_name=None):
+    def download_activity_fit(self, activity_id, activity_data, file_name=None):
         if not self.client:
             self.login()
         try:
@@ -76,6 +80,9 @@ class GarminConnectAPI:
             with open(file_name, "wb") as f:
                 f.write(fit_data)
             logger.info(f"FIT file saved as '{file_name}'")
+            
+            # Store metadata
+            self.metadata_store.store_activity_metadata(activity_data, file_name)
             return file_name
         except GarminConnectConnectionError as e:
             logger.error(f"Connection error while downloading FIT file for activity ID {activity_id}: {e}")

@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fitanalysis.garmin_api import GarminConnectAPI
 from garminconnect import GarminConnectAuthenticationError, GarminConnectConnectionError, GarminConnectTooManyRequestsError
+import os
 
 class MockGarminClient:
     def __init__(self, email, password):
@@ -28,7 +29,7 @@ class MockGarminClient:
         if self.email == "connection_error@example.com":
             raise GarminConnectConnectionError("Connection failed")
         if start_date == "2025-01-01" and end_date == "2025-01-07":
-            return [{"activityId": 123, "activityName": "Test Activity"}]
+            return [{"activityId": 123, "activityName": "Test Activity", "startTimeGMT": "2025-01-01T10:00:00Z"}]
         return []
 
     def download_activity(self, activity_id, dl_fmt):
@@ -39,10 +40,14 @@ class MockGarminClient:
         raise Exception("Download failed")
 
 @pytest.fixture
-def garmin_api():
+def garmin_api(tmp_path):
+    db_path = tmp_path / "test_fit_metadata.db"
     with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
-        api = GarminConnectAPI(email="test@example.com", password="password")
+        api = GarminConnectAPI(email="test@example.com", password="password", db_path=str(db_path))
         yield api
+        api.metadata_store.close()
+        if os.path.exists(db_path):
+            os.remove(db_path)
 
 def test_login_success(garmin_api):
     garmin_api.login()
@@ -80,15 +85,22 @@ def test_get_activities_by_date_connection_error():
 
 def test_download_activity_fit_success(garmin_api, tmp_path):
     file_path = tmp_path / "test_activity.fit"
-    downloaded_file = garmin_api.download_activity_fit(123, file_name=str(file_path))
+    activity_data = {"activityId": 123, "activityName": "Test Activity", "startTimeGMT": "2025-01-01T10:00:00Z"}
+    downloaded_file = garmin_api.download_activity_fit(123, activity_data, file_name=str(file_path))
     assert downloaded_file == str(file_path)
     assert file_path.read_bytes() == b"dummy_fit_data"
+    
+    # Verify metadata stored
+    metadata_df = garmin_api.metadata_store.get_all_activities()
+    assert not metadata_df.empty
+    assert metadata_df['activity_id'].iloc[0] == '123'
+    assert metadata_df['activity_name'].iloc[0] == 'Test Activity'
 
 def test_download_activity_fit_connection_error():
     with patch('fitanalysis.garmin_api.Garmin', new=MockGarminClient):
         api = GarminConnectAPI(email="connection_error@example.com", password="password")
         with pytest.raises(GarminConnectConnectionError):
-            api.download_activity_fit(123)
+            api.download_activity_fit(123, {"activityId": 123})
 
 def test_logout(garmin_api):
     garmin_api.login()
