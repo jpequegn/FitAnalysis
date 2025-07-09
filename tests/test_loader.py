@@ -1,18 +1,30 @@
 import pandas as pd
 import pytest
-from fitanalysis.loader import FitDataLoader, FitParseError, max_power_by_time
+from fitanalysis.loader import FitDataLoader, FitParseError, FitFileNotFoundError, FitFileCorruptedError
 import fitanalysis.loader as loader_module
 from fitanalysis.dummy_data import DummyFitFile
+import os
 
+@pytest.fixture
+def dummy_fit_files(tmp_path):
+    fit_files = {
+        "dummy.fit": b"",
+        "power_only.fit": b"",
+        "hr_only.fit": b"",
+        "empty.fit": b"",
+        "corrupt.fit": b"",
+    }
+    for name, content in fit_files.items():
+        (tmp_path / name).write_bytes(content)
+    return tmp_path
 
 @pytest.fixture(autouse=True)
 def patch_fitfile(monkeypatch):
     monkeypatch.setattr(loader_module, 'FitFile', DummyFitFile)
 
-
-def test_load_creates_dataframe():
-    loader = FitDataLoader('dummy.fit')
-    df = loader.load()
+def test_load_creates_dataframe(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
+    df = loader.data
     assert list(df.index) == [pd.Timestamp('2020-01-01T00:00:00Z'), pd.Timestamp('2020-01-01T00:00:01Z'), pd.Timestamp('2020-01-01T00:00:02Z')]
     assert 'heart_rate' in df.columns
     assert 'power' in df.columns
@@ -20,9 +32,8 @@ def test_load_creates_dataframe():
     assert df.loc[pd.Timestamp('2020-01-01T00:00:01Z'), 'power'] == 151
     assert pd.isna(df.loc[pd.Timestamp('2020-01-01T00:00:02Z'), 'heart_rate'])
 
-
-def test_get_heart_rate_series():
-    loader = FitDataLoader('dummy.fit')
+def test_get_heart_rate_series(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
     hr = loader.get_heart_rate()
     assert isinstance(hr, pd.Series)
     assert hr.name == 'heart_rate'
@@ -30,26 +41,23 @@ def test_get_heart_rate_series():
     assert hr.iloc[1] == 101
     assert pd.isna(hr.iloc[2])
 
-
-def test_get_power_series():
-    loader = FitDataLoader('dummy.fit')
+def test_get_power_series(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
     power = loader.get_power()
     assert isinstance(power, pd.Series)
     assert power.name == 'power'
     assert list(power) == [150, 151, 152]
 
-
-def test_empty_file():
-    loader = FitDataLoader('empty.fit')
-    df = loader.load()
+def test_empty_file(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'empty.fit'))
+    df = loader.data
     assert df.empty
     assert loader.get_heart_rate().empty
     assert loader.get_power().empty
 
-
-def test_power_only():
-    loader = FitDataLoader('power_only.fit')
-    df = loader.load()
+def test_power_only(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'power_only.fit'))
+    df = loader.data
     assert 'heart_rate' not in df.columns
     assert 'power' in df.columns
     hr = loader.get_heart_rate()
@@ -57,10 +65,9 @@ def test_power_only():
     power = loader.get_power()
     assert list(power) == [200, 201]
 
-
-def test_hr_only():
-    loader = FitDataLoader('hr_only.fit')
-    df = loader.load()
+def test_hr_only(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'hr_only.fit'))
+    df = loader.data
     assert 'heart_rate' in df.columns
     assert 'power' not in df.columns
     hr = loader.get_heart_rate()
@@ -68,16 +75,16 @@ def test_hr_only():
     power = loader.get_power()
     assert power.empty
 
-def test_corrupt_file():
-    loader = FitDataLoader('corrupt.fit')
-    with pytest.raises(IOError, match="Error parsing FIT file: Corrupted file"):
-        loader.load()
+def test_corrupt_file(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'corrupt.fit'))
+    with pytest.raises(FitFileCorruptedError, match="Error parsing FIT file.*Corrupted file"):
+        _ = loader.data
 
-def test_max_power_by_time():
+def test_max_power_by_time(dummy_fit_files):
     """
     Tests the max_power_by_time function.
     """
-    max_power = max_power_by_time('dummy.fit')
+    max_power = FitDataLoader.max_power_by_time(str(dummy_fit_files / 'dummy.fit'))
     assert isinstance(max_power, pd.Series)
     assert max_power.to_dict() == {
         pd.to_datetime('2020-01-01T00:00:00Z').time(): 150,
@@ -85,27 +92,23 @@ def test_max_power_by_time():
         pd.to_datetime('2020-01-01T00:00:02Z').time(): 152,
     }
 
-def test_get_normalized_power():
-    loader = FitDataLoader('dummy.fit')
+def test_get_normalized_power(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
     np_value = loader.get_normalized_power()
-    # Based on the dummy data, a manual calculation for NP would be:
-    # Power values: 150, 151, 152
-    # Rolling 30s average (since data is 1s apart, this is just the value itself for each point)
-    # (150^4 + 151^4 + 152^4) / 3 = 510375062.666...
-    # NP = (510375062.666...)^(1/4) = 150.66
     assert np_value == pytest.approx(150.66, rel=1e-2)
 
-def test_get_intensity_factor():
-    loader = FitDataLoader('dummy.fit')
+def test_get_intensity_factor(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
     ftp = 200
     if_value = loader.get_intensity_factor(ftp)
-    # IF = NP / FTP = 150.66 / 200 = 0.7533
     assert if_value == pytest.approx(0.7533, rel=1e-2)
 
-def test_get_training_stress_score():
-    loader = FitDataLoader('dummy.fit')
+def test_get_training_stress_score(dummy_fit_files):
+    loader = FitDataLoader(str(dummy_fit_files / 'dummy.fit'))
     ftp = 200
     tss_value = loader.get_training_stress_score(ftp)
-    # TSS = (duration_seconds * NP * IF * 100) / (FTP * 3600)
-    # TSS = (2 * 150.66 * 0.7533 * 100) / (200 * 3600) = 0.0315
     assert tss_value == pytest.approx(0.0315, rel=1e-2)
+
+def test_file_not_found():
+    with pytest.raises(FitFileNotFoundError):
+        FitDataLoader('non_existent_file.fit')

@@ -1,7 +1,7 @@
 import os
 import json
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, asdict
 from pathlib import Path
 import logging
 
@@ -36,7 +36,7 @@ class WebConfig:
     host: str = '127.0.0.1'
     port: int = 8000
     max_file_size: int = 100 * 1024 * 1024  # 100MB
-    allowed_extensions: list = None
+    allowed_extensions: Optional[List[str]] = None
     temp_dir: Optional[str] = None
 
     def __post_init__(self):
@@ -62,7 +62,7 @@ class FitAnalysisConfig:
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'FitAnalysisConfig':
-        """Create config from dictionary."""
+        """Create config from a dictionary."""
         return cls(
             database=DatabaseConfig(**config_dict.get('database', {})),
             garmin=GarminConfig(**config_dict.get('garmin', {})),
@@ -72,11 +72,11 @@ class FitAnalysisConfig:
 
     @classmethod
     def from_file(cls, config_path: str) -> 'FitAnalysisConfig':
-        """Load configuration from file."""
+        """Load configuration from a file."""
         config_path = Path(config_path)
         
         if not config_path.exists():
-            logger.warning(f"Config file {config_path} not found. Using defaults.")
+            logger.warning(f"Config file {config_path} not found. Using default configuration.")
             return cls.default()
         
         try:
@@ -129,7 +129,7 @@ class FitAnalysisConfig:
 
     @classmethod
     def default(cls) -> 'FitAnalysisConfig':
-        """Create default configuration."""
+        """Create a default configuration."""
         return cls(
             database=DatabaseConfig(),
             garmin=GarminConfig(),
@@ -138,34 +138,11 @@ class FitAnalysisConfig:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert configuration to dictionary."""
-        return {
-            'database': {
-                'path': self.database.path,
-                'read_only': self.database.read_only
-            },
-            'garmin': {
-                'email': self.garmin.email,
-                'password': self.garmin.password,
-                'rate_limit_delay': self.garmin.rate_limit_delay,
-                'max_retries': self.garmin.max_retries
-            },
-            'web': {
-                'host': self.web.host,
-                'port': self.web.port,
-                'max_file_size': self.web.max_file_size,
-                'allowed_extensions': self.web.allowed_extensions,
-                'temp_dir': self.web.temp_dir
-            },
-            'logging': {
-                'level': self.logging.level,
-                'format': self.logging.format,
-                'file_path': self.logging.file_path
-            }
-        }
+        """Convert the configuration to a dictionary."""
+        return asdict(self)
 
     def save_to_file(self, config_path: str) -> None:
-        """Save configuration to file."""
+        """Save the configuration to a file."""
         config_path = Path(config_path)
         config_dict = self.to_dict()
         
@@ -202,7 +179,6 @@ class ConfigManager:
         if self.config_path:
             self._config = FitAnalysisConfig.from_file(self.config_path)
         else:
-            # Try to find config file in common locations
             possible_paths = [
                 'fitanalysis.yaml',
                 'fitanalysis.yml',
@@ -217,24 +193,23 @@ class ConfigManager:
             
             for path in possible_paths:
                 if os.path.exists(path):
-                    logger.info(f"Found config file at {path}")
+                    logger.info(f"Found config file at {path}, loading.")
                     self._config = FitAnalysisConfig.from_file(path)
                     break
             else:
-                # No config file found, use environment variables
                 logger.info("No config file found. Loading from environment variables.")
                 self._config = FitAnalysisConfig.from_env()
         
         return self._config
     
     def get(self) -> FitAnalysisConfig:
-        """Get current configuration."""
+        """Get the current configuration."""
         if self._config is None:
             self._config = self.load()
         return self._config
     
     def reload(self) -> FitAnalysisConfig:
-        """Reload configuration."""
+        """Reload the configuration."""
         self._config = None
         return self.load()
 
@@ -249,13 +224,12 @@ def get_config() -> FitAnalysisConfig:
 
 
 def setup_logging(config: Optional[FitAnalysisConfig] = None) -> None:
-    """Set up logging based on configuration."""
+    """Set up logging based on the configuration."""
     if config is None:
         config = get_config()
     
     log_level = getattr(logging, config.logging.level.upper(), logging.INFO)
     
-    # Configure logging
     logging.basicConfig(
         level=log_level,
         format=config.logging.format,
@@ -266,12 +240,4 @@ def setup_logging(config: Optional[FitAnalysisConfig] = None) -> None:
     logger.info(f"Logging configured with level: {config.logging.level}")
 
 
-if __name__ == "__main__":
-    # Example usage
-    config = FitAnalysisConfig.default()
-    print("Default configuration:")
-    print(json.dumps(config.to_dict(), indent=2))
-    
-    # Save example configuration
-    config.save_to_file("fitanalysis.example.yaml")
-    print("\nExample configuration saved to fitanalysis.example.yaml")
+
